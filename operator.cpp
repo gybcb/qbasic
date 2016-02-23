@@ -246,6 +246,15 @@ ExprASTPtr NumberExprOperation::operator_comp(ASTContext ctx, MathOperator op, E
 	llvm::IRBuilder<> builder(ctx.block);
 	llvm::Value * result;
 
+	llvm::Type* lhstype = LHS->getType();
+	llvm::Type* rhstype = RHS->getType();
+
+	lhstype->dump();
+	rhstype->dump();
+
+	// assert(*(LHS->getType()) == *(RHS->getType()) &&
+        //   "Both operands to ICmp instruction are not of the same type!");
+
 	switch(op){
 		case OPERATOR_LESS:
 			result = builder.CreateICmpSLT(LHS,RHS);
@@ -336,7 +345,8 @@ ExprASTPtr FunctionExprOperation::operator_call(ASTContext ctx,NamedExprASTPtr c
 	llvm::Value * llvmfunc =funcdim->getval(ctx);
 
 	if(!llvmfunc){ //有定义, 则直接调用, 无定义就 ... 呵呵.
-		llvmfunc = static_cast<CallableExprTypeAST*>(funcdim)->defaultprototype(ctx,calltarget->ID->ID);
+	    //llvmfunc = dynamic_cast<CallableExprTypeAST*>(funcdim)->defaultprototype(ctx,calltarget->ID->ID);
+	    llvmfunc = ((CallableExprTypeAST*)funcdim)->defaultprototype(ctx, calltarget->ID->ID);
 	}
 
 	//构建参数列表.

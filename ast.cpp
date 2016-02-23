@@ -70,6 +70,12 @@ FunctionDimAST::FunctionDimAST(const std::string _name, ExprTypeASTPtr _type, Ar
 	this->body = CodeBlockASTPtr(body);
 }
 
+DefaultMainFunctionAST::DefaultMainFunctionAST(CodeBlockAST * body)
+        : FunctionDimAST("main", ExprTypeASTPtr(new CallableExprTypeAST(VoidExprTypeAST::GetVoidExprTypeAST())))
+{
+        this->body = CodeBlockASTPtr(body);
+}
+
 ReferenceAST::ReferenceAST(std::string* tID)
 	: ID(*tID)
 {}

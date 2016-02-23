@@ -23,6 +23,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <string>
+#include <iostream>
+
 #include "llvm/IR/Verifier.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 #include "llvm/ExecutionEngine/Interpreter.h"
@@ -35,119 +38,171 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 
-using namespace llvm;
+#include "ast.hpp"
+#include "parser.hpp"
 
-static Function *CreateFibFunction(Module *M, LLVMContext &Context) {
-  // Create the fib function and insert it into module M. This function is said
-  // to return an int and take an int parameter.
-  Function *FibF =
-    cast<Function>(M->getOrInsertFunction("fib", Type::getInt32Ty(Context),
-                                          Type::getInt32Ty(Context),
-                                          (Type *)0));
+extern FILE *yyin;
+StatementAST * program;
 
-  // Add a basic block to the function.
-  BasicBlock *BB = BasicBlock::Create(Context, "EntryBlock", FibF);
+// using namespace llvm;
 
-  // Get pointers to the constants.
-  Value *One = ConstantInt::get(Type::getInt32Ty(Context), 1);
-  Value *Two = ConstantInt::get(Type::getInt32Ty(Context), 2);
+// static Function *CreateFibFunction(Module *M, LLVMContext &Context) {
+//   // Create the fib function and insert it into module M. This function is said
+//   // to return an int and take an int parameter.
+//   Function *FibF =
+//     cast<Function>(M->getOrInsertFunction("fib", Type::getInt32Ty(Context),
+//                                           Type::getInt32Ty(Context),
+//                                           (Type *)0));
 
-  // Get pointer to the integer argument of the add1 function...
-  Argument *ArgX = FibF->arg_begin();   // Get the arg.
-  ArgX->setName("AnArg");            // Give it a nice symbolic name for fun.
+//   // Add a basic block to the function.
+//   BasicBlock *BB = BasicBlock::Create(Context, "EntryBlock", FibF);
 
-  // Create the true_block.
-  BasicBlock *RetBB = BasicBlock::Create(Context, "return", FibF);
-  // Create an exit block.
-  BasicBlock* RecurseBB = BasicBlock::Create(Context, "recurse", FibF);
+//   // Get pointers to the constants.
+//   Value *One = ConstantInt::get(Type::getInt32Ty(Context), 1);
+//   Value *Two = ConstantInt::get(Type::getInt32Ty(Context), 2);
 
-  // Create the "if (arg <= 2) goto exitbb"
-  Value *CondInst = new ICmpInst(*BB, ICmpInst::ICMP_SLE, ArgX, Two, "cond");
-  BranchInst::Create(RetBB, RecurseBB, CondInst, BB);
+//   // Get pointer to the integer argument of the add1 function...
+//   Argument *ArgX = FibF->arg_begin();   // Get the arg.
+//   ArgX->setName("AnArg");            // Give it a nice symbolic name for fun.
 
-  // Create: ret int 1
-  ReturnInst::Create(Context, One, RetBB);
+//   // Create the true_block.
+//   BasicBlock *RetBB = BasicBlock::Create(Context, "return", FibF);
+//   // Create an exit block.
+//   BasicBlock* RecurseBB = BasicBlock::Create(Context, "recurse", FibF);
 
-  // create fib(x-1)
-  Value *Sub = BinaryOperator::CreateSub(ArgX, One, "arg", RecurseBB);
-  CallInst *CallFibX1 = CallInst::Create(FibF, Sub, "fibx1", RecurseBB);
-  CallFibX1->setTailCall();
+//   // Create the "if (arg <= 2) goto exitbb"
+//   Value *CondInst = new ICmpInst(*BB, ICmpInst::ICMP_SLE, ArgX, Two, "cond");
+//   BranchInst::Create(RetBB, RecurseBB, CondInst, BB);
 
-  // create fib(x-2)
-  Sub = BinaryOperator::CreateSub(ArgX, Two, "arg", RecurseBB);
-  CallInst *CallFibX2 = CallInst::Create(FibF, Sub, "fibx2", RecurseBB);
-  CallFibX2->setTailCall();
+//   // Create: ret int 1
+//   ReturnInst::Create(Context, One, RetBB);
 
+//   // create fib(x-1)
+//   Value *Sub = BinaryOperator::CreateSub(ArgX, One, "arg", RecurseBB);
+//   CallInst *CallFibX1 = CallInst::Create(FibF, Sub, "fibx1", RecurseBB);
+//   CallFibX1->setTailCall();
 
-  // fib(x-1)+fib(x-2)
-  Value *Sum = BinaryOperator::CreateAdd(CallFibX1, CallFibX2,
-                                         "addresult", RecurseBB);
-
-  // Create the return instruction and add it to the basic block
-  ReturnInst::Create(Context, Sum, RecurseBB);
-
-  return FibF;
-}
+//   // create fib(x-2)
+//   Sub = BinaryOperator::CreateSub(ArgX, Two, "arg", RecurseBB);
+//   CallInst *CallFibX2 = CallInst::Create(FibF, Sub, "fibx2", RecurseBB);
+//   CallFibX2->setTailCall();
 
 
-int main(int argc, char **argv) {
-  int n = argc > 1 ? atol(argv[1]) : 24;
+//   // fib(x-1)+fib(x-2)
+//   Value *Sum = BinaryOperator::CreateAdd(CallFibX1, CallFibX2,
+//                                          "addresult", RecurseBB);
 
-  InitializeNativeTarget();
+//   // Create the return instruction and add it to the basic block
+//   ReturnInst::Create(Context, Sum, RecurseBB);
 
-  llvm::InitializeNativeTargetAsmPrinter();
-  llvm::InitializeNativeTargetAsmParser();
+//   return FibF;
+// }
 
-  LLVMContext Context;
 
-  // Create some module to put our function into it.
-  std::unique_ptr<Module> Owner(new Module("test", Context));
-  Module *M = Owner.get();
+// int main(int argc, char **argv) {
+//   int n = argc > 1 ? atol(argv[1]) : 24;
 
-  // We are about to create the "fib" function:
-  Function *FibF = CreateFibFunction(M, Context);
+//   InitializeNativeTarget();
 
-  // RTDyldMemoryManager *MemMgr = new SectionMemoryManager();
-  // if (!MemMgr) {
-  //   errs() << "Unable to create memory manager.";
-  //   return;
-  // }
+//   llvm::InitializeNativeTargetAsmPrinter();
+//   llvm::InitializeNativeTargetAsmParser();
 
-  // Now we going to create JIT
-  std::string errStr;
-  EngineBuilder builder(std::move(Owner));
-  builder.setErrorStr(&errStr);
-  builder.setEngineKind(EngineKind::JIT);
-  //builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(MemMgr));
-  //builder.setUseOrcMCJITReplacement(true);
+//   LLVMContext Context;
 
-  ExecutionEngine *EE = builder.create();
+//   // Create some module to put our function into it.
+//   std::unique_ptr<Module> Owner(new Module("test", Context));
+//   Module *M = Owner.get();
 
-  if (!EE) {
-    errs() << argv[0] << ": Failed to construct ExecutionEngine: " << errStr
-           << "\n";
-    return 1;
-  }
+//   // We are about to create the "fib" function:
+//   Function *FibF = CreateFibFunction(M, Context);
 
-  errs() << "verifying... ";
-  if (verifyModule(*M)) {
-    errs() << argv[0] << ": Error constructing function!\n";
-    return 1;
-  }
+//   // RTDyldMemoryManager *MemMgr = new SectionMemoryManager();
+//   // if (!MemMgr) {
+//   //   errs() << "Unable to create memory manager.";
+//   //   return;
+//   // }
 
-  errs() << "OK\n";
-  errs() << "We just constructed this LLVM module:\n\n---------\n" << *M;
-  errs() << "---------\nstarting fibonacci(" << n << ") with JIT...\n";
+//   // Now we going to create JIT
+//   std::string errStr;
+//   EngineBuilder builder(std::move(Owner));
+//   builder.setErrorStr(&errStr);
+//   builder.setEngineKind(EngineKind::JIT);
+//   //builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(MemMgr));
+//   //builder.setUseOrcMCJITReplacement(true);
 
-  // Call the Fibonacci function with argument n:
-  std::vector<GenericValue> Args(1);
-  Args[0].IntVal = APInt(32, n);
+//   ExecutionEngine *EE = builder.create();
 
-  EE->finalizeObject();
-  GenericValue GV = EE->runFunction(FibF, Args);
+//   if (!EE) {
+//     errs() << argv[0] << ": Failed to construct ExecutionEngine: " << errStr
+//            << "\n";
+//     return 1;
+//   }
 
-  // import result of execution
-  outs() << "Result: " << GV.IntVal << "\n";
+//   errs() << "verifying... ";
+//   if (verifyModule(*M)) {
+//     errs() << argv[0] << ": Error constructing function!\n";
+//     return 1;
+//   }
 
-  return 0;
+//   errs() << "OK\n";
+//   errs() << "We just constructed this LLVM module:\n\n---------\n" << *M;
+//   errs() << "---------\nstarting fibonacci(" << n << ") with JIT...\n";
+
+//   // Call the Fibonacci function with argument n:
+//   std::vector<GenericValue> Args(1);
+//   Args[0].IntVal = APInt(32, n);
+
+//   EE->finalizeObject();
+//   GenericValue GV = EE->runFunction(FibF, Args);
+
+//   // import result of execution
+//   outs() << "Result: " << GV.IntVal << "\n";
+
+//   return 0;
+// }
+
+int main(int argc, char **argv)
+{
+    if (argc < 2)
+    {
+	std::cout << "usage: prog [filename]" << std::endl;
+	return 1;
+    }
+    
+    std::string input = argv[1];
+
+    std::cout << "openning: " << input << std::endl;
+
+    yyin = std::fopen(input.c_str(), "r");
+
+    if (!yyin)
+    {
+	std:: cout << "open " << input << " failed!" << std::endl;
+	return 1;
+    }
+
+    qb::parser parser;
+    parser.parse();
+
+    std::cout << "parse done, no errors!" << std::endl;
+
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
+    llvm::LLVMContext Context;
+    llvm::Module* Module = new llvm::Module("test", Context);
+
+    ASTContext ctx;
+    ctx.module = Module;
+
+    CodeBlockAST gloablblock;
+    ctx.codeblock = &gloablblock;
+
+    ((StatementAST*)(program))->Codegen(ctx);
+
+    std::cout << "Fib ir" << std::endl;
+    Module->dump();
+
+    return 0;
 }
